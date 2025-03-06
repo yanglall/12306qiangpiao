@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>抢票页面</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .container { max-width: 600px; margin: 50px auto; }
+        .train-header { background: linear-gradient(135deg, #ff6b6b, #ff8787); color: white; padding: 2rem; border-radius: 1rem; }
+        .seat-card { cursor: pointer; transition: all 0.2s; }
+        .seat-card:hover { transform: translateY(-3px); }
+        .passenger-item { background: #f8f9fa; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 车次信息 -->
+        <div class="train-header mb-5">
+            <h2 id="trainNumber" class="mb-3"></h2>
+            <h5 id="trainRoute"></h5>
+        </div>
+
+        <!-- 座位选择 -->
+        <div class="mb-5">
+            <h4 class="mb-4">选择座位类型</h4>
+            <div class="row g-3" id="seatOptions"></div>
+        </div>
+        <!-- 抢票时间输入框 -->
+        <div class="mb-5">
+            <div class="form-group">
+                <label for="bookingTime">设置抢票时间</label>
+                <input type="datetime-local" class="form-control" id="bookingTime" required>
+            </div>
+        </div>
+
+        <!-- 乘客信息 -->
+        <form id="bookingForm">
+            <div class="mb-5">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4>乘客信息</h4>
+                    <button type="button" class="btn btn-outline-secondary" onclick="addPassenger()">
+                        + 添加乘客
+                    </button>
+                </div>
+                <div id="passengerList">
+                    <div class="passenger-item">
+                        <input type="text" class="form-control mb-2" placeholder="乘车人序号" required>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="d-grid gap-3">
+                <button type="submit" class="btn btn-danger btn-lg py-3" onclick="Gotologin()">立即抢票</button>
+                <a href="/" class="btn btn-outline-secondary btn-lg py-3">返回查询</a>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(location.search);
+            const ticket = JSON.parse(decodeURIComponent(params.get('data')));
+      
+            // 显示车次信息
+            document.getElementById('trainNumber').textContent = ticket.train_number;
+            document.getElementById('trainRoute').textContent = 
+                `${ticket.from_city} ${ticket.departure_time} → ${ticket.to_city} ${ticket.arrival_time}`;
+
+            // 生成座位选项
+            const seatContainer = document.getElementById('seatOptions');
+            Object.entries(ticket.seats).forEach(([type, count]) => {
+                if (count === '无') return;
+
+                const col = document.createElement('div');
+                col.className = 'col-12 col-md-6';
+          
+                const card = document.createElement('div');
+                card.className = 'card seat-card mb-3';
+                card.innerHTML = `
+                    <div class="card-body">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="seatType" 
+                                id="${type}" value="${type}" required>
+                            <label class="form-check-label h5" for="${type}">
+                                ${type} 
+                                <span class="badge bg-success ms-2">剩余 ${count}</span>
+                            </label>
+                        </div>
+                    </div>
+                `;
+                col.appendChild(card);
+                seatContainer.appendChild(col);
+            });
+        });
+
+        function addPassenger() {
+            const container = document.getElementById('passengerList');
+            const newItem = document.createElement('div');
+            newItem.className = 'passenger-item';
+            newItem.innerHTML = `
+                <input type="text" class="form-control mb-2" placeholder="乘车人序号" required>
+                
+            `;
+            container.appendChild(newItem);
+        }
+
+        function Gotologin() {
+    // 获取表单数据
+            const passengerItems = document.querySelectorAll('.passenger-item');
+            const passengers = [];
+
+            passengerItems.forEach(item => {
+                const input = item.querySelector('input');
+                if (input && input.value.trim() !== '') {
+                    passengers.push(input.value.trim());
+                }
+            });
+
+
+    // 获取选中的座位类型
+            const seatType = document.querySelector('input[name="seatType"]:checked').value;
+
+    // 获取当前页面的ticket数据
+    
+            const params = new URLSearchParams(location.search);
+            const ticket = JSON.parse(decodeURIComponent(params.get('data')));
+            const bookingTime = document.getElementById('bookingTime').value;
+    // 将用户选择的信息添加到ticket中
+            ticket.passengers = passengers;
+            ticket.seatType = seatType;
+            ticket.bookingTime = bookingTime;
+    // 对ticket对象进行URL编码
+            const encodedData = encodeURIComponent(JSON.stringify(ticket));
+
+    // 跳转到/look页面并传入data参数
+            window.location.href = `/login?data=${encodedData}`;
+        }
+
+
+        document.getElementById('bookingForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+      
+            const formData = {
+                train_number: document.getElementById('trainNumber').textContent,
+                seat_type: document.querySelector('input[name="seatType"]:checked')?.value,
+                passengers: Array.from(document.querySelectorAll('.passenger-item')).map(item => ({
+                    id: item.children[0].value,
+                }))
+            };
+
+            if (!formData.seat_type) {
+                alert('请选择座位类型');
+                return;
+            }
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `
+                <span class="spinner-border spinner-border-sm" role="status"></span>
+                抢票中...
+            `;
+
+            try {
+                const response = await fetch('/book', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+          
+                const result = await response.json();
+                if (result.success) {
+                    // alert(`抢票成功！\n订单号：${result.order_id}\n车次：${result.train_info}\n座位类型：${result.seat_type}`);
+                    // location.href = '/';
+                } else {
+                    // alert(`抢票失败：${result.error}`);
+                }
+            } catch (error) {
+                // alert('请求失败：' + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '立即抢票';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>12306车票查询</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .container { max-width: 800px; margin: 50px auto; }
+        .train-card { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 8px; transition: transform 0.2s; }
+        .train-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .seat-badge { margin-right: 8px; font-size: 0.9em; }
+        #loading { height: 100px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4 text-center">火车票查询系统</h1>
+  
+        <!-- 查询表单 -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <input type="text" class="form-control" id="fromStation" placeholder="出发站" required>
+                    </div>
+                    <div class="col-md-4">
+                        <input type="text" class="form-control" id="toStation" placeholder="到达站" required>
+                    </div>
+                    <div class="col-md-3">
+                        <input type="date" class="form-control" id="travelDate" required>
+                    </div>
+                    <div class="col-md-1">
+                        <button class="btn btn-primary w-100" onclick="queryTickets()">查询</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 查询结果 -->
+        <div id="results"></div>
+  
+        <!-- 加载动画 -->
+        <div id="loading" class="text-center d-none">
+            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <p class="mt-2 text-muted">正在查询车次信息...</p>
+        </div>
+    </div>
+
+    <script>
+        async function queryTickets() {
+            const from = document.getElementById('fromStation').value;
+            const to = document.getElementById('toStation').value;
+            const date = document.getElementById('travelDate').value;
+      
+            if (!from || !to || !date) {
+                alert('请填写所有查询条件');
+                return;
+            }
+
+            document.getElementById('loading').classList.remove('d-none');
+      
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ from, to, date })
+                });
+          
+                if (!response.ok) throw new Error(await response.text());
+          
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+          
+                displayResults(data);
+            } catch (error) {
+                alert('查询失败: ' + error.message);
+            } finally {
+                document.getElementById('loading').classList.add('d-none');
+            }
+        }
+
+        function displayResults(tickets) {
+            const container = document.getElementById('results');
+            container.innerHTML = tickets.length ? '' : '<p class="text-center text-muted">未找到相关车次</p>';
+      
+            tickets.forEach(ticket => {
+                const card = document.createElement('div');
+                card.className = 'train-card';
+                card.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="text-primary">${ticket.train_number}</h4>
+                        <button class="btn btn-danger" 
+                            onclick="location.href='/book?data=${encodeURIComponent(JSON.stringify(ticket))}'">
+                            立即抢票 →
+                        </button>
+                    </div>
+                    <p class="text-secondary">
+                        ${ticket.departure_station} ${ticket.departure_time} → 
+                        ${ticket.arrival_station} ${ticket.arrival_time} 
+                        <span class="ms-3">历时 ${ticket.duration}</span>
+                    </p>
+                    <div class="seat-info">
+                        ${Object.entries(ticket.seats)
+                            .filter(([_, status]) => status !== '无')
+                            .map(([type, status]) => 
+                                `<span class="badge bg-success seat-badge">${type}: ${status}</span>`
+                            ).join('')}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>

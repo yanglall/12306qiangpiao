@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>12306登录</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .container { max-width: 600px; margin: 50px auto; }
+        .login-form { margin-bottom: 20px; }
+        .verification-form { display: none; margin-top: 20px; }
+        .qrcode-container {
+            margin-top: 20px;
+            text-align: center;
+            display: none;
+        }
+        .qrcode-close {
+            cursor: pointer;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">12306登录</h1>
+        
+        <!-- 账号密码表单 -->
+        <form class="login-form" id="loginForm">
+            <div class="mb-3">
+                <label for="username" class="form-label">账号</label>
+                <input type="text" class="form-control" id="username" name="username" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">密码</label>
+                <input type="password" class="form-control" id="password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">登录</button>
+            <button type="button" id="saoma" class="btn btn-primary w-100"  style="margin-top: 10px;">扫码登录</button>
+        </form>
+            
+        <!-- 身份证和验证码表单 -->
+        <form class="verification-form" id="verificationForm">
+            <div class="mb-3">
+                <label for="id_card" class="form-label">身份证后四位</label>
+                <input type="text" class="form-control" id="id_card" name="id_card" pattern="\d{4}" required>
+            </div>
+            <div class="mb-3">
+                <label for="verification_code" class="form-label">验证码</label>
+                <input type="text" class="form-control" id="verification_code" name="verification_code" required>
+            </div>
+            <button type="button" class="btn btn-primary w-100 mb-3" onclick="sendVerificationCode()">发送验证码</button>
+            <button type="submit" class="btn btn-success w-100">验证</button>
+        </form>
+
+        <!-- 扫码二维码显示容器 -->
+        <div class="qrcode-container" id="qrcodeContainer">
+            <img id="qrcodeImage" alt="扫码登录二维码" style="max-width: 100%; height: auto;">
+            <span class="qrcode-close" onclick="hideQrcode()">×</span>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password})
+            }) 
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('loginForm').style.display = 'none';
+                    document.getElementById('verificationForm').style.display = 'block';
+                } else {
+                    alert(data.message || '登录失败，请重试。');
+                }
+            });
+        });
+
+        
+        document.getElementById('saoma').addEventListener('click', function(e){
+            e.preventDefault();
+            const params = new URLSearchParams(location.search);
+            const ticket = JSON.parse(decodeURIComponent(params.get('data')));
+            const from_city = ticket.from_city;
+            const to_city = ticket.to_city;
+            const date = ticket.date;
+            const car_important_masage1 = ticket.car_important_masage1;
+            const car_important_masage2 = ticket.car_important_masage2;
+            const car_important_masage3 = ticket.car_important_masage3;
+            const bookingTime = ticket.bookingTime;
+            const seatType = ticket.seatType;
+            passengers = ticket.passengers;
+            fetch('/saoma', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            }) 
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const img_url = data.img_url;
+                    const qrcodeContainer = document.getElementById('qrcodeContainer');
+                    const qrcodeImage = document.getElementById('qrcodeImage');
+                    
+                    qrcodeContainer.style.display = 'block';
+                    qrcodeImage.src = img_url;
+                    fetch('/saomalogin',{
+                        method: 'POST',
+                        headers:{'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            from_city, 
+                            to_city, 
+                            date,
+                            car_important_masage1,
+                            car_important_masage2,
+                            car_important_masage3,
+                            passengers,
+                            bookingTime,
+                            seatType
+                        })
+                    })
+                    qrcodeImage.onerror = function() {
+                        alert('二维码图片加载失败，请重试。');
+                        qrcodeContainer.style.display = 'none';
+                    };
+                    
+                } else {
+                    alert(data.message || '登录失败，请重试。');
+                }
+            });
+        });
+
+        function hideQrcode() {
+            document.getElementById('qrcodeContainer').style.display = 'none';
+        }
+
+        function sendVerificationCode() {
+            const id_card = document.getElementById('id_card').value;
+            
+            fetch('/send_code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id_card })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('验证码已发送，请注意查收。');
+                    document.getElementById('verification_code').value = data.verification_code;
+                } else {
+                    alert(data.message || '发送验证码失败，请重试。');
+                }
+            })
+            .catch(error => {
+                alert('请求失败：' + error.message);
+            });
+        }
+
+        document.getElementById('verificationForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const id_card = document.getElementById('id_card').value;
+            const verification_code = document.getElementById('verification_code').value;
+            const params = new URLSearchParams(location.search);
+            const ticket = JSON.parse(decodeURIComponent(params.get('data')));
+            const from_city = ticket.from_city;
+            const to_city = ticket.to_city;
+            const date = ticket.date;
+            const car_important_masage1 = ticket.car_important_masage1;
+            const car_important_masage2 = ticket.car_important_masage2;
+            const car_important_masage3 = ticket.car_important_masage3;
+            const bookingTime = ticket.bookingTime;
+            const seatType = ticket.seatType;
+            passengers = ticket.passengers;
+            
+            fetch('/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    id_card, 
+                    verification_code, 
+                    from_city, 
+                    to_city, 
+                    date,
+                    car_important_masage1,
+                    car_important_masage2,
+                    car_important_masage3,
+                    passengers,
+                    bookingTime,
+                    seatType 
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    window.location.href = '/';
+                } else {
+                    alert(data.message || '验证失败，请重试。');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
